@@ -111,6 +111,7 @@
                     "\"var\" :\""                                           \
                         "Hello phone, "                                     \
                         "message from CC3200 via AWS IoT!"                  \
+                        "BRUH srsly this is not that cool but it is fun!!!" \
                         "\"\r\n"                                            \
                 "}"                                                         \
             "}"                                                             \
@@ -204,6 +205,7 @@ static int set_time() {
 }
 
 //*****************************************************************************
+//
 //
 //! Main 
 //!
