@@ -550,7 +550,6 @@ void DisplaySenderText(int lRetVal) {
 
 
     if (prevIndex < text_idx) {
-        IntMasterDisable();
         for (i = prevIndex; i <= text_idx; i++) {
             if (text_buffer[i] == '\n') {
                 newLines++;
@@ -589,7 +588,6 @@ void DisplaySenderText(int lRetVal) {
 
             }
         }
-        IntMasterEnable();
 
     } else if (prevIndex > text_idx) {
         IntMasterDisable();
@@ -877,7 +875,7 @@ static int aws_post_message(const char *msg, int sockID)
     printf("inside aws before response\n");
 
     // 7) Receive the response
-    //lRetVal = sl_Recv(sockID, acRecvBuff, sizeof(acRecvBuff), 0);
+    lRetVal = sl_Recv(sockID, acRecvBuff, sizeof(acRecvBuff), 0);
     if (lRetVal < 0) {
         printf("inside fail response\n");
         UART_PRINT("AWS POST recv failed: %d\n\r", lRetVal);
@@ -986,6 +984,7 @@ void main() {
         ERR_PRINT(lRetVal);
     }
 
+    //http_post(lRetVal);
     // Initialize OLED
     Adafruit_Init();
     fillScreen(BLACK);
