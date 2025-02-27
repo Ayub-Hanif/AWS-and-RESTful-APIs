@@ -307,7 +307,7 @@ unsigned long Decode_IR(uint64_t *buffer, int size) {
         start_idx++;
     }
 
-    UART_PRINT("Decoded value: 0x%08lx\n\r", value);
+    //UART_PRINT("Decoded value: 0x%08lx\n\r", value);
     return value;
 }
 
@@ -523,56 +523,21 @@ static void UARTIntHandler(void) {
     UARTIntEnable(UARTA1_BASE, UART_INT_RX);
 }
 
-/******************************************************************************
- * DisplayReceiverText:
- * Shows any text that came in from the "recv_buffer" (UART1) on the OLED.
- ******************************************************************************/
-void DisplayRecieverText() {
-    static int prevIndex = 0;
-    if (prevIndex == recv_idx) {
-        return; // no new text
-    }
+static int aws_post_message(const char *msg, int sockID);
 
-    IntMasterDisable();
+//********************* OLED DISPLAY FUNCTIONS *********************************\\
+//******************************************************************************\\
 
-    unsigned char recv_text[64];
-    int i;
-    for (i = UART_START_CMD_SIZE; i < recv_idx; i++) {
-        recv_text[i - UART_START_CMD_SIZE] = recv_buffer[i];
-    }
-    recv_text[i - 1] = '\0';
-
-    // Clear old if needed
-    if (recv_buffer_reset == 1) {
-        fillRect(10, 10, prevIndex*6, 10, BLACK);
-        int j;
-        int cursor_x = 10;
-        int cursor_y = 10;
-        for (j = 0; j < i; j++) {
-            drawChar(cursor_x, cursor_y, recv_text[j],
-                     TEXT_COLOR_PALET[DecoderVal.colorPalet], BLACK, 1);
-            cursor_x += 6;
-        }
-        recv_buffer_reset = 0;
-    }
-    prevIndex = recv_idx;
-    IntMasterEnable();
-}
-
-/******************************************************************************
- * DisplaySenderText:
- * Renders the text typed via IR.  Once we see a '\n', we do the AWS post.
- * The main fix here is to avoid misusing 'i' after loops.
- ******************************************************************************/
 void DisplaySenderText(int lRetVal) {
     static int prevIndex = 0;
     static int inPlaceTextCount = 0;
     int newLines = 0;
     int lineIdx = 0;
-    int lineHeight = 80;
     int i;
+    int lineHeight = 80;
 
-    // Step 1: figure out how many lines exist up to prevIndex
+
+
     for (i = 0; i < prevIndex; i++) {
         if (text_buffer[i] == '\n') {
             newLines++;
@@ -582,89 +547,121 @@ void DisplaySenderText(int lRetVal) {
         }
     }
 
+
+
     if (prevIndex < text_idx) {
-        // We have newly typed characters to show
         IntMasterDisable();
-        for (i = prevIndex; i < text_idx; i++) {
+        for (i = prevIndex; i <= text_idx; i++) {
             if (text_buffer[i] == '\n') {
-                // user pressed "LAST" => we treat that as "send"
                 newLines++;
                 lineIdx = 0;
 
-                printf("sendUart before \n");
-
-                // Send the entire message to the other UART (if any)
-                sendUARTStart();
                 int j;
-                for (j = 0; j < text_idx; j++) {
-                    UARTCharPut(UARTA1_BASE, text_buffer[j]);
-                    UtilsDelay(UART_SIGNAL_DELAY);
-                }
+                //printf("Sending start data\n");
+                //sendUARTStart();
+                //for (j = 0; j < text_idx; j++) {
+                //    UARTCharPut(UARTA1_BASE, text_buffer[j]);
+                //    UtilsDelay(UART_SIGNAL_DELAY);
+                //}
 
                 // Actually post to AWS
                 aws_post_message((const char *)text_buffer, lRetVal);
 
-                // Clear text on the OLED
                 fillRect(10, lineHeight, 6*text_idx, 8, BLACK);
-
-                // Reset the text buffer
                 text_idx = 0;
                 text_buffer[0] = '\0';
 
-                // Reset IR decoding states
                 DecoderVal.sameButtonCount = 0;
                 DecoderVal.logButtonCount = 0;
+
                 DecoderVal.letter = '?';
                 DecoderVal.previousButton = 0;
+
                 DecoderVal.timerStarter = 0;
+
+
             } else {
-                // Just show the new character
-                int cursor_x = 10 + lineIdx * 6;
+                int cursor_x = 10 + lineIdx*6;
                 int cursor_y = lineHeight + newLines * 12;
                 unsigned char character = text_buffer[i];
-                drawChar(cursor_x, cursor_y, character,
-                         TEXT_COLOR_PALET[DecoderVal.colorPalet], BLACK, 1);
+                drawChar(cursor_x, cursor_y, character, TEXT_COLOR_PALET[DecoderVal.colorPalet], BLACK, 1);
                 lineIdx++;
+
             }
         }
         IntMasterEnable();
 
-        // Done with all new characters => move prevIndex up
-        prevIndex = text_idx;
-
     } else if (prevIndex > text_idx) {
-        // Possibly user pressed MUTE, so we have fewer chars now
         IntMasterDisable();
-        // "erase" old characters from the screen
         for (i = prevIndex; i > text_idx; i--) {
-            fillRect(10 + lineIdx*6, lineHeight + newLines*12, 6, 8, BLACK);
+            fillRect(10 + lineIdx*6, lineHeight + newLines*12, 10, 10, BLACK);
             lineIdx--;
         }
         IntMasterEnable();
-        prevIndex = text_idx;
 
-    } else {
-        // (prevIndex == text_idx) => no net new or removed chars
-        // Here is the "in place" logic that was in your original code
-        // in case you want to redraw or blink the last letter, etc.
-
+    } else if (prevIndex == text_idx) {
         if (inPlaceTextCount == 8) {
-            // do nothing special
-        }
-        else if (inPlaceTextCount == 9) {
-            int cursor_x = 10 + lineIdx * 6;
+            /*
+            int cursor_x = 10 + lineIdx*6;
             int cursor_y = lineHeight + newLines * 12;
-            if (text_idx > 0 && text_buffer[text_idx-1] != '\n') {
+            IntMasterDisable();
+            fillRect(cursor_x, cursor_y, 6, 8, WHITE);
+            fillRect(cursor_x, cursor_y, 6, 8, BLACK);
+            IntMasterEnable();
+            */
+        } else if (inPlaceTextCount == 9) {
+            int cursor_x = 10 + lineIdx*6;
+            int cursor_y = lineHeight + newLines * 12;
+            //IntMasterDisable();
+            if (text_buffer[i] != '\n') {
                 IntMasterDisable();
                 fillRect(cursor_x, cursor_y, 6, 8, BLACK);
-                drawChar(cursor_x, cursor_y, text_buffer[text_idx-1],
-                         TEXT_COLOR_PALET[DecoderVal.colorPalet], BLACK, 1);
+                drawChar(cursor_x, cursor_y, text_buffer[i], TEXT_COLOR_PALET[DecoderVal.colorPalet], BLACK, 1);
                 IntMasterEnable();
             }
+            //IntMasterEnable();
             inPlaceTextCount = 0;
         }
+
         inPlaceTextCount++;
     }
+
+
+    prevIndex = i;
+}
+
+void DisplayRecieverText() {
+    static int prevIndex = 0;
+    if (prevIndex == recv_idx) {
+        return;
+    }
+
+    IntMasterDisable();
+
+    unsigned char recv_text[64];
+    int i;
+
+    for (i = UART_START_CMD_SIZE; i < recv_idx; i++) {
+        recv_text[i - UART_START_CMD_SIZE] = recv_buffer[i];
+    }
+    recv_text[i - 1] = '\0';
+    //printf("Printing: %s", recv_text);
+
+    if (recv_buffer_reset == 1) {
+        fillRect(10, 10, prevIndex*6, 10, BLACK);
+        int j;
+        int cursor_x = 10;
+        int cursor_y = 10;
+        for (j = 0; j < i; j++) {
+            drawChar(cursor_x, cursor_y, recv_text[j], TEXT_COLOR_PALET[DecoderVal.colorPalet], BLACK, 1);
+            cursor_x += 6;
+        }
+        recv_buffer_reset = 0;
+    }
+
+    prevIndex = recv_idx;
+
+    IntMasterEnable();
 }
 
 //*****************************************************************************
@@ -880,7 +877,7 @@ static int aws_post_message(const char *msg, int sockID)
     printf("inside aws before response\n");
 
     // 7) Receive the response
-    lRetVal = sl_Recv(sockID, acRecvBuff, sizeof(acRecvBuff), 0);
+    //lRetVal = sl_Recv(sockID, acRecvBuff, sizeof(acRecvBuff), 0);
     if (lRetVal < 0) {
         printf("inside fail response\n");
         UART_PRINT("AWS POST recv failed: %d\n\r", lRetVal);
@@ -891,7 +888,6 @@ static int aws_post_message(const char *msg, int sockID)
     acRecvBuff[lRetVal] = '\0';
     UART_PRINT("AWS POST Response:\n\r%s\n\r", acRecvBuff);
     printf("before return\n");
-
     return 0;
 }
 
@@ -997,7 +993,7 @@ void main() {
     while (1) {
         UtilsDelay(1000000);
         DisplaySenderText(lRetVal);
-        DisplayRecieverText();
+        //DisplayRecieverText();
     }
 
     // If we ever break from while(1):
