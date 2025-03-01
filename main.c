@@ -294,7 +294,7 @@ unsigned long Decode_IR(uint64_t *buffer, int size) {
         // Convert ticks to microseconds
         unsigned long pulse_us = (unsigned long)(buffer[i] / 80);
 
-        // If we see a very large gap, that often indicates "start of a new sequence".
+        // If we see a huge gap, that often indicates the "start of a new sequence".
         if (pulse_us > 4000) {
             start_idx = 0;
             continue;
@@ -554,16 +554,9 @@ void DisplaySenderText(int lRetVal) {
             if (text_buffer[i] == '\n') {
                 newLines++;
                 lineIdx = 0;
-
                 int j;
-                //printf("Sending start data\n");
-                //sendUARTStart();
-                //for (j = 0; j < text_idx; j++) {
-                //    UARTCharPut(UARTA1_BASE, text_buffer[j]);
-                //    UtilsDelay(UART_SIGNAL_DELAY);
-                //}
-
-                // Actually post to AWS
+              
+                //post to AWS
                 aws_post_message((const char *)text_buffer, lRetVal);
 
                 fillRect(10, lineHeight, 6*text_idx, 8, BLACK);
@@ -599,14 +592,6 @@ void DisplaySenderText(int lRetVal) {
 
     } else if (prevIndex == text_idx) {
         if (inPlaceTextCount == 8) {
-            /*
-            int cursor_x = 10 + lineIdx*6;
-            int cursor_y = lineHeight + newLines * 12;
-            IntMasterDisable();
-            fillRect(cursor_x, cursor_y, 6, 8, WHITE);
-            fillRect(cursor_x, cursor_y, 6, 8, BLACK);
-            IntMasterEnable();
-            */
         } else if (inPlaceTextCount == 9) {
             int cursor_x = 10 + lineIdx*6;
             int cursor_y = lineHeight + newLines * 12;
@@ -663,10 +648,10 @@ void DisplayRecieverText() {
 }
 
 //*****************************************************************************
-// AWS IoT / Networking
+// AWS IoT / Networking LAB4 with extended time
 //*****************************************************************************
 
-// Update this to your actual date/time if needed
+// We update this to actual date/time every run
 #define DATE    25
 #define MONTH   2
 #define YEAR    2025
@@ -830,19 +815,19 @@ static int aws_post_message(const char *msg, int sockID)
     strncpy(localMsg, msg, sizeof(localMsg)-1);
     localMsg[sizeof(localMsg)-1] = '\0';
 
-    // remove trailing newline or carriage return
+    // then remove trailing newline
     int length = strlen(localMsg);
     while (length > 0 && (localMsg[length-1]=='\n' || localMsg[length-1]=='\r')) {
         localMsg[length-1] = '\0';
         length--;
     }
 
-    // 2) Build JSON payload WITHOUT extra newlines
+    // 2) making sure we build JSON payload --WITHOUT-- extra newlines
     // example: {"state":{"desired":{"var":"HELLO"}}}
     snprintf(jsonPayload, sizeof(jsonPayload),
              "{\"state\":{\"desired\":{\"var\":\"%s\"}}}", localMsg);
 
-    // 3) Build HTTP POST
+    // 3) we build HTTP POST
     pcBufHeaders = acSendBuff;
     strcpy(pcBufHeaders, "POST /things/Ayub_CC3200_Board/shadow HTTP/1.1\r\n");
     pcBufHeaders += strlen(pcBufHeaders);
@@ -853,7 +838,7 @@ static int aws_post_message(const char *msg, int sockID)
     strcpy(pcBufHeaders, "Content-Type: application/json; charset=utf-8\r\n");
     pcBufHeaders += strlen(pcBufHeaders);
 
-    // 4) Content-Length
+    // 4) find the Content-Length
     sprintf(cCLLength, "Content-Length: %d\r\n\r\n", (int)strlen(jsonPayload));
     strcpy(pcBufHeaders, cCLLength);
     pcBufHeaders += strlen(cCLLength);
@@ -863,7 +848,7 @@ static int aws_post_message(const char *msg, int sockID)
 
     UART_PRINT("Sending to AWS:\n\r%s\n\r", acSendBuff);
 
-    // 6) Send the POST
+    // 6) we then send the POST
     lRetVal = sl_Send(sockID, acSendBuff, strlen(acSendBuff), 0);
     if (lRetVal < 0) {
         UART_PRINT("AWS POST send failed: %d\n\r", lRetVal);
@@ -874,7 +859,7 @@ static int aws_post_message(const char *msg, int sockID)
 
     printf("inside aws before response\n");
 
-    // 7) Receive the response
+    // 7) We receive the response
     lRetVal = sl_Recv(sockID, acRecvBuff, sizeof(acRecvBuff), 0);
     if (lRetVal < 0) {
         printf("inside fail response\n");
@@ -903,7 +888,7 @@ static int aws_get_message(int sockID)
         return sockID;
     }
 
-    // 1) Build HTTP GET Request
+    // 1) Build HTTP GET Request using the demo and then need to change only somethings
     pcBufHeaders = acSendBuff;
     strcpy(pcBufHeaders, "GET /things/Ayub_CC3200_Board/shadow HTTP/1.1\r\n");
     pcBufHeaders += strlen(pcBufHeaders);
@@ -913,7 +898,7 @@ static int aws_get_message(int sockID)
 
     UART_PRINT("Sending GET request to AWS:\n\r%s\n\r", acSendBuff);
 
-    // 2) Send the GET request
+    // 2) we then send the GET request
     lRetVal = sl_Send(sockID, acSendBuff, strlen(acSendBuff), 0);
     if (lRetVal < 0) {
         UART_PRINT("AWS GET send failed: %d\n\r", lRetVal);
@@ -924,7 +909,7 @@ static int aws_get_message(int sockID)
 
     printf("inside aws_get_message before response\n");
 
-    // 3) Receive the response
+    // 3) We receive the response here
     lRetVal = sl_Recv(sockID, acRecvBuff, sizeof(acRecvBuff), 0);
     if (lRetVal < 0) {
         printf("inside fail response\n");
@@ -987,7 +972,7 @@ static void SysTickInit(void) {
     MAP_SysTickPeriodSet(SYSTICK_RELOAD_VAL * 4);
     MAP_SysTickIntRegister(SysTickHandler);
     MAP_SysTickIntEnable();
-    // We do NOT enable SysTick right away; we only start it in the IR handler.
+    // We do NOT enable SysTick immediately; we only start it in the IR handler.
 }
 
 static void SysTimerInit(void) {
@@ -1020,12 +1005,12 @@ void main() {
     SysTickInit();
     SysTimerInit();
 
-    // Connect the CC3200 to Wi-Fi, then do TLS to AWS
+    // CC3200 to Wi-Fi, TLS to AWS
     g_app_config.host = SERVER_NAME;
     g_app_config.port = GOOGLE_DST_PORT;
 
-    lRetVal = connectToAccessPoint();   // <--- your network_utils call
-    lRetVal = set_time();               // set system time for secure connection
+    lRetVal = connectToAccessPoint(); 
+    lRetVal = set_time();
     if(lRetVal < 0) {
         UART_PRINT("Unable to set time in the device\n\r");
         LOOP_FOREVER();
@@ -1036,7 +1021,6 @@ void main() {
     }
 
     //http_post(lRetVal);
-    // Initialize OLED
     Adafruit_Init();
     fillScreen(BLACK);
     drawLine(0, 64, 128, 64, WHITE);
@@ -1046,10 +1030,8 @@ void main() {
         //DisplayRecieverText();
     }
 
-    // If we ever break from while(1):
     printf("here before stop \n");
     //sl_Stop(SL_STOP_TIMEOUT);
     //LOOP_FOREVER();
     printf("After it loop \n");
-    //;p
 }
