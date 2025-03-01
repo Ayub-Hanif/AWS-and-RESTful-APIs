@@ -889,6 +889,57 @@ static int aws_post_message(const char *msg, int sockID)
     return 0;
 }
 
+static int aws_get_message(int sockID)
+{
+    int lRetVal;
+    char acSendBuff[512];
+    char acRecvBuff[1460];
+    char *pcBufHeaders;
+
+    printf("inside aws_get_message\n");
+
+    if (sockID < 0) {
+        UART_PRINT("TLS connect failed in aws_get_message\n\r");
+        return sockID;
+    }
+
+    // 1) Build HTTP GET Request
+    pcBufHeaders = acSendBuff;
+    strcpy(pcBufHeaders, "GET /things/Ayub_CC3200_Board/shadow HTTP/1.1\r\n");
+    pcBufHeaders += strlen(pcBufHeaders);
+    strcpy(pcBufHeaders, "Host: a25abq9uai3xbf-ats.iot.us-east-1.amazonaws.com\r\n");
+    pcBufHeaders += strlen(pcBufHeaders);
+    strcpy(pcBufHeaders, "Connection: Keep-Alive\r\n\r\n");
+
+    UART_PRINT("Sending GET request to AWS:\n\r%s\n\r", acSendBuff);
+
+    // 2) Send the GET request
+    lRetVal = sl_Send(sockID, acSendBuff, strlen(acSendBuff), 0);
+    if (lRetVal < 0) {
+        UART_PRINT("AWS GET send failed: %d\n\r", lRetVal);
+        sl_Close(sockID);
+        GPIO_IF_LedOn(MCU_RED_LED_GPIO);
+        return lRetVal;
+    }
+
+    printf("inside aws_get_message before response\n");
+
+    // 3) Receive the response
+    lRetVal = sl_Recv(sockID, acRecvBuff, sizeof(acRecvBuff), 0);
+    if (lRetVal < 0) {
+        printf("inside fail response\n");
+        UART_PRINT("AWS GET recv failed: %d\n\r", lRetVal);
+        GPIO_IF_LedOn(MCU_RED_LED_GPIO);
+        return lRetVal;
+    }
+    printf("after response\n");
+    acRecvBuff[lRetVal] = '\0';
+    UART_PRINT("AWS GET Response:\n\r%s\n\r", acRecvBuff);
+    printf("before return\n");
+    return 0;
+}
+
+
 //*****************************************************************************
 // Initialize hardware modules
 //*****************************************************************************
