@@ -131,7 +131,7 @@
 #define SPI_IF_BIT_RATE  16000000
 #define TR_BUFF_SIZE     100
 
-#define OLED_SPI_TX_DMA_CHANNEL    0x04
+#define TEXT_BUFFER_SIZE 64
 
 #define MASTER_MSG       "This is CC3200 SPI Master Application\n\r"
 #define SLAVE_MSG        "This is CC3200 SPI Slave Application\n\r"
@@ -207,13 +207,14 @@ extern uVectorEntry __vector_table;
 volatile int systick_cnt = 0;
 extern void (* const g_pfnVectors[])(void);
 
-volatile uint64_t transmission_buffer[64];
+volatile uint64_t transmission_buffer[TEXT_BUFFER_SIZE];
 volatile int tb_idx = 0;
 
-volatile unsigned char text_buffer[64];
+volatile unsigned char text_buffer[TEXT_BUFFER_SIZE];
 volatile int text_idx = 0;
+volatile int text_head = 0, text_tail = 0;
 
-volatile unsigned char recv_buffer[64];
+volatile unsigned char recv_buffer[TEXT_BUFFER_SIZE];
 volatile int recv_buffer_reset = 0;
 volatile int recv_idx = 0;
 
@@ -239,6 +240,10 @@ struct IRDecoderValues {
     char prevLetter;
     int timerStarter;
     int colorPalet;
+};
+
+static const char *multiTapMapping[10] = {
+    "0 ", "1", "ABC2", "DEF3", "GHI4", "JKL5", "MNO6", "PQRS7", "TUV8", "WXYZ9"
 };
 
 volatile static struct IRDecoderValues DecoderVal = {0, 0, '?', '?', '?', 0, 0};
@@ -284,10 +289,7 @@ void sendUARTStart() {
  * This logic depends on your IR remote's pulse timings and thresholds.
  ******************************************************************************/
 unsigned long Decode_IR(uint64_t *buffer, int size) {
-    if (size < 32) {
-        // Not enough pulses or partial reading
-        return 0;
-    }
+    if (size < 32) return 0;
 
     unsigned long value = 0;
     int i, start_idx = 0;
@@ -302,9 +304,7 @@ unsigned long Decode_IR(uint64_t *buffer, int size) {
         }
 
         // example threshold ~1100 us for distinguishing '0' from '1'
-        if (pulse_us > 1100) {
-            value |= (1UL << (size - (start_idx)));
-        }
+        value |= (pulse_us > 1100) << (size - (start_idx));
         start_idx++;
     }
 
@@ -317,8 +317,6 @@ unsigned long Decode_IR(uint64_t *buffer, int size) {
  * If user presses the same button repeatedly, we cycle among letters.
  ******************************************************************************/
 static void Processing_DecodedIR(unsigned long value) {
-    char number = 0;
-
     // If MUTE was pressed, treat it like a "backspace".
     if (value == MUTE) {
         text_idx--;
@@ -352,44 +350,34 @@ static void Processing_DecodedIR(unsigned long value) {
             DecoderVal.letter = "1"[DecoderVal.sameButtonCount % 1];
             break;
         case TWO:
-            number = '2';
             DecoderVal.letter = "ABC2"[DecoderVal.sameButtonCount % 4];
             break;
         case THREE:
-            number = '3';
             DecoderVal.letter = "DEF3"[DecoderVal.sameButtonCount % 4];
             break;
         case FOUR:
-            number = '4';
             DecoderVal.letter = "GHI4"[DecoderVal.sameButtonCount % 4];
             break;
         case FIVE:
-            number = '5';
             DecoderVal.letter = "JKL5"[DecoderVal.sameButtonCount % 5];
             break;
         case SIX:
-            number = '6';
             DecoderVal.letter = "MNO6"[DecoderVal.sameButtonCount % 4];
             break;
         case SEVEN:
-            number = '7';
             DecoderVal.letter = "PQRS7"[DecoderVal.sameButtonCount % 5];
             break;
         case EIGHT:
-            number = '8';
             DecoderVal.letter = "TUV8"[DecoderVal.sameButtonCount % 4];
             break;
         case NINE:
-            number = '9';
             DecoderVal.letter = "WXYZ9"[DecoderVal.sameButtonCount % 5];
             break;
         case ZERO:
-            number = '0';
             DecoderVal.letter = "0 "[DecoderVal.sameButtonCount % 2];
             break;
         case LAST:
             // Using 'LAST' as an Enter or "Send" => newline
-            number = 'L';
             DecoderVal.letter = '\n';
             break;
         default:
@@ -577,7 +565,9 @@ void DisplaySenderText(int lRetVal) {
                 int cursor_x = 10 + lineIdx*6;
                 int cursor_y = lineHeight + newLines * 12;
                 unsigned char character = text_buffer[i];
+                IntMasterDisable();
                 drawChar(cursor_x, cursor_y, character, TEXT_COLOR_PALET[DecoderVal.colorPalet], BLACK, 1);
+                IntMasterEnable();
                 lineIdx++;
 
             }
@@ -592,8 +582,13 @@ void DisplaySenderText(int lRetVal) {
         IntMasterEnable();
 
     } else if (prevIndex == text_idx) {
-        if (inPlaceTextCount == 8) {
-        } else if (inPlaceTextCount == 9) {
+        if (inPlaceTextCount == 7) {
+            int cursor_x = 10 + lineIdx*6;
+            int cursor_y = lineHeight + newLines * 12;
+            IntMasterDisable();
+            fillRect(cursor_x, cursor_y, 6, 8, WHITE);
+            IntMasterEnable();
+        } else if (inPlaceTextCount == 11) {
             int cursor_x = 10 + lineIdx*6;
             int cursor_y = lineHeight + newLines * 12;
             //IntMasterDisable();
@@ -1027,10 +1022,16 @@ void main() {
     Adafruit_Init();
     fillScreen(BLACK);
     drawLine(0, 64, 128, 64, WHITE);
+    int reset_cnt = 0;
     while (1) {
         UtilsDelay(1000000);
         DisplaySenderText(lRetVal);
         //DisplayRecieverText();
+        if (reset_cnt % 100 == 0) {
+            printf("reset state\n");
+            SysTickEnable();
+        }
+        reset_cnt++;
     }
 
     printf("here before stop \n");
