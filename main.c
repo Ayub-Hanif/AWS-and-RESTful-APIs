@@ -128,8 +128,10 @@
 //*****************************************************************************
 #define MASTER_MODE      1
 
-#define SPI_IF_BIT_RATE  100000
+#define SPI_IF_BIT_RATE  16000000
 #define TR_BUFF_SIZE     100
+
+#define OLED_SPI_TX_DMA_CHANNEL    0x04
 
 #define MASTER_MSG       "This is CC3200 SPI Master Application\n\r"
 #define SLAVE_MSG        "This is CC3200 SPI Slave Application\n\r"
@@ -240,7 +242,6 @@ struct IRDecoderValues {
 };
 
 volatile static struct IRDecoderValues DecoderVal = {0, 0, '?', '?', '?', 0, 0};
-
 
 //*****************************************************************************
 // Board Initialization & Configuration
@@ -943,10 +944,12 @@ static int aws_get_message(int sockID)
 //*****************************************************************************
 // Initialize hardware modules
 //*****************************************************************************
+
 static void SPIInit(void) {
     MAP_PRCMPeripheralClkEnable(PRCM_GSPI, PRCM_RUN_MODE_CLK);
     MAP_PRCMPeripheralReset(PRCM_GSPI);
     MAP_SPIReset(GSPI_BASE);
+
     MAP_SPIFIFOEnable(GSPI_BASE, SPI_TX_FIFO || SPI_RX_FIFO);
 
     MAP_SPIConfigSetExpClk(GSPI_BASE,
@@ -956,7 +959,7 @@ static void SPIInit(void) {
                            SPI_SUB_MODE_0,
                            (SPI_SW_CTRL_CS |
                             SPI_4PIN_MODE |
-                            SPI_TURBO_OFF |
+                            SPI_TURBO_ON |
                             SPI_CS_ACTIVEHIGH |
                             SPI_WL_8));
     MAP_SPIEnable(GSPI_BASE);
