@@ -303,7 +303,7 @@ unsigned long Decode_IR(uint64_t *buffer, int size) {
             continue;
         }
 
-        // example threshold ~1100 us for distinguishing '0' from '1'
+        // example threshold 1100 us for distinguishing '0' from '1'
         value |= (pulse_us > 1100) << (size - (start_idx));
         start_idx++;
     }
@@ -377,7 +377,6 @@ static void Processing_DecodedIR(unsigned long value) {
             DecoderVal.letter = "0 "[DecoderVal.sameButtonCount % 2];
             break;
         case LAST:
-            // Using 'LAST' as an Enter or "Send" => newline
             DecoderVal.letter = '\n';
             break;
         default:
@@ -395,7 +394,6 @@ static void Processing_DecodedIR(unsigned long value) {
     DecoderVal.previousButton = value;
     text_buffer[text_idx] = DecoderVal.letter;
 
-    // Let the "single press" timer start
     DecoderVal.timerStarter = 1;
 }
 
@@ -414,7 +412,6 @@ static void GPIOA3IntHandler(void) {
     if (ulStatus & IR_GPIO_PIN) {
         currState = MAP_GPIOPinRead(IR_GPIO_PORT, IR_GPIO_PIN);
 
-        // If we are just now starting a new IR transmission
         if (tb_idx == 0) {
             Timer_IF_InterruptClear(g_ulBase);
             MAP_SysTickEnable();
@@ -463,7 +460,7 @@ static void SysTimerHandler(void) {
     Timer_IF_Stop(g_ulBase, TIMER_A);
     MAP_SysTickDisable();
 
-    text_idx++; // finalize the partial letter
+    text_idx++;
 
     DecoderVal.sameButtonCount = 0;
     DecoderVal.logButtonCount = 0;
@@ -591,14 +588,12 @@ void DisplaySenderText(int lRetVal) {
         } else if (inPlaceTextCount == 11) {
             int cursor_x = 10 + lineIdx*6;
             int cursor_y = lineHeight + newLines * 12;
-            //IntMasterDisable();
             if (text_buffer[i] != '\n') {
                 IntMasterDisable();
                 fillRect(cursor_x, cursor_y, 6, 8, BLACK);
                 drawChar(cursor_x, cursor_y, text_buffer[i], TEXT_COLOR_PALET[DecoderVal.colorPalet], BLACK, 1);
                 IntMasterEnable();
             }
-            //IntMasterEnable();
             inPlaceTextCount = 0;
         }
 
@@ -624,7 +619,6 @@ void DisplayRecieverText() {
         recv_text[i - UART_START_CMD_SIZE] = recv_buffer[i];
     }
     recv_text[i - 1] = '\0';
-    //printf("Printing: %s", recv_text);
 
     if (recv_buffer_reset == 1) {
         fillRect(10, 10, prevIndex*6, 10, BLACK);
@@ -647,7 +641,6 @@ void DisplayRecieverText() {
 // AWS IoT / Networking LAB4 with extended time
 //*****************************************************************************
 
-// We update this to actual date/time every run
 #define DATE    25
 #define MONTH   2
 #define YEAR    2025
@@ -745,7 +738,6 @@ static int http_post(int iTLSSockID){
 
     UART_PRINT(acSendBuff);
 
-    // Send the packet to the server
     lRetVal = sl_Send(iTLSSockID, acSendBuff, strlen(acSendBuff), 0);
     if(lRetVal < 0) {
         UART_PRINT("POST failed. Error Number: %i\n\r",lRetVal);
@@ -806,8 +798,8 @@ static int aws_post_message(const char *msg, int sockID)
         return sockID;
     }
 
-    // 1) Copy 'msg' into a local buffer so we can strip trailing '\n' or '\r'
-    char localMsg[64];
+    // 1) local buffer so we can strip trailing
+    char localMsg[64] = "";
     strncpy(localMsg, msg, sizeof(localMsg)-1);
     localMsg[sizeof(localMsg)-1] = '\0';
 
@@ -818,8 +810,7 @@ static int aws_post_message(const char *msg, int sockID)
         length--;
     }
 
-    // 2) making sure we build JSON payload --WITHOUT-- extra newlines
-    // example: {"state":{"desired":{"var":"HELLO"}}}
+    // 2) build JSON payload extra newlines
     snprintf(jsonPayload, sizeof(jsonPayload),
              "{\"state\":{\"desired\":{\"var\":\"%s\"}}}", localMsg);
 
